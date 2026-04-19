@@ -338,6 +338,59 @@ function spawnRow(str, baseY, layer) {
   return arr;
 }
 
+// ── Diff-based row update: only replace changed characters ──
+function diffUpdateRow(oldBodies, oldStr, newStr, layer, removeFn) {
+  // Find common prefix
+  let prefix = 0;
+  while (prefix < oldStr.length && prefix < newStr.length && oldStr[prefix] === newStr[prefix]) {
+    prefix++;
+  }
+
+  // If completely different (single digit change, decade change), replace all
+  if (prefix === 0) {
+    removeFn(oldBodies);
+    return null; // caller should spawn full new row
+  }
+
+  // Keep prefix bodies, remove the rest
+  const kept = oldBodies.slice(0, prefix);
+  const removed = oldBodies.slice(prefix);
+  removeFn(removed);
+
+  // Calculate new layout positions
+  const sz = sizeForLayer(layer);
+  const charW = Math.min(sz * 1.05, (W - 60) / newStr.length);
+  const totalW = newStr.length * charW;
+  const sx = (W - totalW) / 2;
+
+  // Gently reposition kept bodies if string length changed
+  if (oldStr.length !== newStr.length) {
+    for (let i = 0; i < prefix; i++) {
+      const targetX = sx + charW * (i + 0.5);
+      const b = kept[i];
+      const dx = targetX - b.position.x;
+      if (Math.abs(dx) > 1) {
+        Body.setVelocity(b, { x: dx * 0.15, y: b.velocity.y });
+      }
+    }
+  }
+
+  // Spawn only new suffix characters
+  const baseY = (layer === 's' || layer === 'm') ? -sz * 0.5 : -sz * 1.2;
+  for (let i = prefix; i < newStr.length; i++) {
+    const x = sx + charW * (i + 0.5);
+    const y = baseY - (newStr.length - 1 - i) * sz * 0.35;
+    const b = createBody(newStr[i], x, y, layer);
+    if (layer === 's' || layer === 'm') {
+      Body.setVelocity(b, { x: 0, y: 8 });
+    }
+    Composite.add(world, b);
+    kept.push(b);
+  }
+
+  return kept;
+}
+
 function scatterRow(arr) {
   const now = performance.now();
   arr.forEach(b => {
@@ -431,28 +484,49 @@ function sync() {
 
   if (h === prevH && m === prevM && s === prevS) return;
 
-  // ── Seconds ── (fade out old over 100ms, spawn new from closer)
+  // ── Seconds ── (diff update: only changed chars fade & respawn)
   if (s !== prevS) {
-    fadeOutBodies(sBodies);
-    sBodies = spawnRow(s, -sizeForLayer('s') * 0.5, 's');
+    const result = diffUpdateRow(sBodies, prevS, s, 's', fadeOutBodies);
+    if (result) {
+      sBodies = result;
+    } else {
+      sBodies = spawnRow(s, -sizeForLayer('s') * 0.5, 's');
+    }
   }
 
-  // ── Minutes ──
+  // ── Minutes ── (diff update: only changed chars scatter & respawn)
   if (m !== prevM) {
-    scatterRow(mBodies);
-    const mStr = m;
-    setTimeout(() => {
-      mBodies = spawnRow(mStr, -sizeForLayer('m') * 0.5, 'm');
-    }, 250);
+    const fadeMBodies = (arr) => {
+      arr.forEach(b => { try { Composite.remove(world, b); } catch(e) {} });
+    };
+    const result = diffUpdateRow(mBodies, prevM, m, 'm', fadeMBodies);
+    if (result) {
+      mBodies = result;
+    } else {
+      // Full replacement with scatter
+      scatterRow(mBodies);
+      const mStr = m;
+      setTimeout(() => {
+        mBodies = spawnRow(mStr, -sizeForLayer('m') * 0.5, 'm');
+      }, 250);
+    }
   }
 
-  // ── Hours ──
+  // ── Hours ── (diff update: only changed chars scatter & respawn)
   if (h !== prevH) {
-    scatterRow(hBodies);
-    const hStr = h;
-    setTimeout(() => {
-      hBodies = spawnRow(hStr, -sizeForLayer('h') * 1.2, 'h');
-    }, 350);
+    const fadeHBodies = (arr) => {
+      arr.forEach(b => { try { Composite.remove(world, b); } catch(e) {} });
+    };
+    const result = diffUpdateRow(hBodies, prevH, h, 'h', fadeHBodies);
+    if (result) {
+      hBodies = result;
+    } else {
+      scatterRow(hBodies);
+      const hStr = h;
+      setTimeout(() => {
+        hBodies = spawnRow(hStr, -sizeForLayer('h') * 1.2, 'h');
+      }, 350);
+    }
   }
 
   prevH = h; prevM = m; prevS = s;
