@@ -589,15 +589,15 @@ function render() {
   ctx.textBaseline = 'top';
   ctx.fillText('HIRAGANA-CLOCK', fontSize * 1.5, fontSize * 1.2);
 
-  // Bottom-right: digital time 00:00:00
+  // Top-right: digital time 00:00:00
   const d = new Date();
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
   const ss = String(d.getSeconds()).padStart(2, '0');
   ctx.fillStyle = 'rgba(0,0,0,0.45)';
   ctx.textAlign = 'right';
-  ctx.textBaseline = 'bottom';
-  ctx.fillText(hh + ':' + mm + ':' + ss, W - fontSize * 1.5, H - fontSize * 1.0);
+  ctx.textBaseline = 'top';
+  ctx.fillText(hh + ':' + mm + ':' + ss, W - fontSize * 1.5, fontSize * 1.2);
 
   ctx.restore();
 }
